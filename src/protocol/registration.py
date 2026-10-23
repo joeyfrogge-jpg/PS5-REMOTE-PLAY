@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import socket
 from dataclasses import dataclass
 from typing import Optional
 
@@ -104,7 +103,7 @@ async def register_console(
             f"User-Agent: PS5-REMOTE-PLAY\r\n"
             f"Connection: close\r\n"
             f"Content-Length: 0\r\n"
-            f"RP-Version: 10.0\r\n"          # illustrative
+            f"RP-Version: 10.0\r\n"
             f"RP-Account-Id: {account_id_b64}\r\n"
             f"RP-Pin: {pin}\r\n"
             f"\r\n"
