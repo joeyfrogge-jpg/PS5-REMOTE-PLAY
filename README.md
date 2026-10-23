@@ -2,39 +2,70 @@
 
 **Independent open-source PlayStation Remote Play client** for PS4 and PS5.
 
-This is a **from-scratch** implementation focused on maximum compatibility with older / lower-powered hardware (older CPUs, integrated graphics, low-end laptops, single-board computers, and legacy operating systems). It is **not** a fork of Chiaki or any other existing project.
-
-## Goals
-
-- Full Remote Play experience equivalent to the official PlayStation Remote Play app
-- Registration using your **PSN Account ID in base64** (the 8-byte little-endian base64 value)
-- Strong emphasis on **older hardware compatibility**:
-  - Software video decoding paths (no hard requirement for modern GPU decode)
-  - Configurable low-resolution / low-bitrate modes
-  - Lightweight UI that runs on modest systems
-  - Support for older operating systems where practical
-- Clean, modern, well-documented codebase that others can audit and extend
-- Fully open source
+This is a **from-scratch** implementation focused on maximum compatibility with older / lower-powered hardware. It is **not** a fork of Chiaki or any other existing project.
 
 ## Current Status
 
-| Component              | Status                          |
-|------------------------|---------------------------------|
-| Account ID tooling     | Done                            |
-| Streaming pipeline     | **Skeleton implemented**        |
-| Software decoder       | Working (PyAV / FFmpeg)         |
-| Packet receiver        | Working (async UDP)             |
-| Stream crypto          | Interface ready (placeholder)   |
-| Session / control      | Not started                     |
-| Discovery / registration | Not started                   |
-| Input & UI             | Not started                     |
+| Component                | Status                          |
+|--------------------------|---------------------------------|
+| Account ID tooling       | Done                            |
+| Streaming pipeline       | Skeleton implemented            |
+| Software decoder         | Working (PyAV / FFmpeg)         |
+| Packet receiver          | Working (async UDP)             |
+| Stream crypto            | Interface ready (placeholder)   |
+| Desktop GUI launcher     | **Done**                        |
+| Windows .exe packaging   | **Ready** (see below)           |
+| Session / control        | Not started                     |
+| Discovery / registration | Not started                     |
+| Real console connection  | Not yet possible                |
 
-### Streaming Pipeline Highlights
+> **Important**: This is still a development skeleton. The .exe runs and exercises the streaming pipeline layers, but it **cannot yet connect to a real PS4/PS5**. Full protocol implementation is required before that works.
 
-- `StreamPipeline` orchestrates receive → decrypt → demux → decode
-- **Software decoding is the default** and first-class path
-- Conservative defaults (720p / 30 fps / modest bitrate) for older machines
-- Easy to force low-power mode via `StreamConfig`
+## Build the Windows .exe
+
+### Requirements
+- Windows 10 or 11
+- Python 3.10 or newer (https://www.python.org)
+- Make sure “Add Python to PATH” was checked during installation
+
+### One-click build
+
+1. Download or clone this repository
+2. Double-click **`build.bat`**
+3. Wait for it to finish
+4. Your executable will be at:
+
+```
+dist\PS5-REMOTE-PLAY.exe
+```
+
+You can copy that single `.exe` anywhere and run it. No Python installation is required on the target machine.
+
+### Manual build (alternative)
+
+```bat
+pip install -r requirements.txt
+pyinstaller --noconfirm --clean --onefile --windowed --name "PS5-REMOTE-PLAY" --add-data "src;src" main.py
+```
+
+Or use the provided spec file:
+
+```bat
+pyinstaller --noconfirm PS5-REMOTE-PLAY.spec
+```
+
+## Running from source
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+A simple dark-themed GUI will open. You can:
+
+- Paste and validate a base64 PSN Account ID
+- Choose resolution / FPS / decode mode / codec
+- Start the streaming pipeline in demo mode (listens for packets)
 
 ## Getting Your Base64 Account ID
 
@@ -42,47 +73,27 @@ This is a **from-scratch** implementation focused on maximum compatibility with 
 python tools/get_account_id.py
 ```
 
-Paste the resulting base64 string when registering a console.
-
-## Quick Start (development)
-
-```bash
-pip install -r requirements.txt
-
-# Example of creating a pipeline (still needs a real session)
-from src.stream import StreamPipeline, StreamConfig
-
-config = StreamConfig(
-    max_width=1280,
-    max_height=720,
-    target_fps=30,
-    decode_mode="software"   # explicit
-)
-pipeline = StreamPipeline(config)
-# await pipeline.start()
-```
-
 ## Project Structure
 
 ```
 PS5-REMOTE-PLAY/
-├── README.md
-├── LICENSE
+├── main.py                 # GUI entry point (becomes the .exe)
+├── build.bat               # One-click Windows builder
+├── PS5-REMOTE-PLAY.spec    # PyInstaller configuration
 ├── requirements.txt
-├── docs/
-│   └── architecture.md
-├── tools/
-│   └── get_account_id.py
 ├── src/
 │   ├── core/
-│   │   └── account.py          # base64 Account ID helpers
+│   │   └── account.py
 │   └── stream/
-│       ├── config.py           # older-hardware friendly settings
-│       ├── receiver.py         # async UDP receiver
-│       ├── crypto.py           # decryption interface
-│       ├── decoder.py          # software-first PyAV decoder
-│       └── pipeline.py         # main orchestrator
-└── tests/
+│       ├── config.py
+│       ├── receiver.py
+│       ├── crypto.py
+│       ├── decoder.py
+│       └── pipeline.py
+├── tools/
+│   └── get_account_id.py
+└── docs/
+    └── architecture.md
 ```
 
 ## License
