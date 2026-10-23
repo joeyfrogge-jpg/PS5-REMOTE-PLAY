@@ -2,34 +2,37 @@
 """
 PS5-REMOTE-PLAY – Main entry point
 
-This is the application launcher. When frozen with PyInstaller it becomes
-the .exe entry point.
+GUI launcher that uses the independent protocol + streaming layers.
+When frozen with PyInstaller this becomes the .exe.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
-import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
 import threading
 import queue
+import tkinter as tk
+from tkinter import ttk, messagebox, scrolledtext
 
-# Make sure src is importable both in development and when frozen
 if getattr(sys, "frozen", False):
-    # Running as compiled .exe
     import os
     sys.path.insert(0, os.path.dirname(sys.executable))
 else:
-    # Running from source
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.core.account import account_id_to_base64, base64_to_account_id
-from src.stream import StreamPipeline, StreamConfig
+from src.stream import StreamConfig
 from src.stream.config import DecodeMode, VideoCodec
-
+from src.protocol import (
+    ConsoleInfo,
+    discover_consoles,
+    RemotePlaySession,
+    SessionState,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,10 +46,9 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PS5-REMOTE-PLAY")
-        self.geometry("720x560")
-        self.minsize(640, 480)
+        self.geometry("780x640")
+        self.minsize(700, 520)
 
-        # Dark-ish theme for a more modern feel
         self.configure(bg="#1e1e1e")
         style = ttk.Style(self)
         try:
@@ -63,7 +65,8 @@ class App(tk.Tk):
         style.configure("TEntry", fieldbackground="#2d2d2d", foreground="#ffffff")
         style.configure("TCombobox", fieldbackground="#2d2d2d", foreground="#ffffff")
 
-        self.pipeline: StreamPipeline | None = None
+        self.session: RemotePlaySession | None = None
+        self.discovered: list[ConsoleInfo] = []
         self.log_queue: queue.Queue[str] = queue.Queue()
 
         self._build_ui()
@@ -73,118 +76,107 @@ class App(tk.Tk):
         main = ttk.Frame(self, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
-        # Header
-        header = ttk.Label(
-            main,
-            text="PS5-REMOTE-PLAY",
-            font=("Segoe UI", 18, "bold"),
-            foreground="#ff8c00",
-        )
-        header.pack(pady=(0, 4))
+        ttk.Label(
+            main, text="PS5-REMOTE-PLAY",
+            font=("Segoe UI", 18, "bold"), foreground="#ff8c00",
+        ).pack(pady=(0, 2))
 
-        subtitle = ttk.Label(
+        ttk.Label(
             main,
-            text="Independent open-source Remote Play client  •  Older hardware focused",
+            text="Independent open-source client  •  Older hardware focused  •  Not Chiaki",
             font=("Segoe UI", 9),
-        )
-        subtitle.pack(pady=(0, 12))
+        ).pack(pady=(0, 10))
 
-        # Account ID section
-        acct_frame = ttk.LabelFrame(main, text="PSN Account ID (base64)", padding=8)
-        acct_frame.pack(fill=tk.X, pady=6)
-
+        # Account ID
+        acct = ttk.LabelFrame(main, text="PSN Account ID (base64)", padding=8)
+        acct.pack(fill=tk.X, pady=4)
         self.account_id_var = tk.StringVar()
-        ttk.Entry(acct_frame, textvariable=self.account_id_var, width=50).pack(
+        ttk.Entry(acct, textvariable=self.account_id_var).pack(
             side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8)
         )
-        ttk.Button(acct_frame, text="Validate", command=self._validate_account_id).pack(
-            side=tk.LEFT
+        ttk.Button(acct, text="Validate", command=self._validate_account_id).pack(side=tk.LEFT)
+
+        # Console connection
+        conn = ttk.LabelFrame(main, text="Console", padding=8)
+        conn.pack(fill=tk.X, pady=4)
+
+        row = ttk.Frame(conn)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Host IP:").pack(side=tk.LEFT)
+        self.host_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self.host_var, width=18).pack(side=tk.LEFT, padx=6)
+        ttk.Label(row, text="PIN (8 digits):").pack(side=tk.LEFT, padx=(12, 0))
+        self.pin_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self.pin_var, width=10).pack(side=tk.LEFT, padx=6)
+        ttk.Button(row, text="Discover", command=self._discover).pack(side=tk.LEFT, padx=8)
+
+        self.console_list = tk.Listbox(
+            conn, height=3, bg="#121212", fg="#e0e0e0",
+            selectbackground="#ff8c00", selectforeground="#000000",
+            font=("Consolas", 9),
         )
+        self.console_list.pack(fill=tk.X, pady=4)
+        self.console_list.bind("<<ListboxSelect>>", self._on_console_select)
 
         # Stream settings
-        settings = ttk.LabelFrame(main, text="Stream Settings (older-hardware defaults)", padding=8)
-        settings.pack(fill=tk.X, pady=6)
+        settings = ttk.LabelFrame(main, text="Stream Settings", padding=8)
+        settings.pack(fill=tk.X, pady=4)
 
-        row1 = ttk.Frame(settings)
-        row1.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row1, text="Max Resolution:").pack(side=tk.LEFT)
+        r1 = ttk.Frame(settings)
+        r1.pack(fill=tk.X, pady=2)
+        ttk.Label(r1, text="Resolution:").pack(side=tk.LEFT)
         self.res_var = tk.StringVar(value="1280x720")
         ttk.Combobox(
-            row1,
-            textvariable=self.res_var,
+            r1, textvariable=self.res_var,
             values=["1920x1080", "1280x720", "960x540", "640x360"],
-            width=12,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=8)
+            width=12, state="readonly",
+        ).pack(side=tk.LEFT, padx=6)
 
-        ttk.Label(row1, text="FPS:").pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Label(r1, text="FPS:").pack(side=tk.LEFT, padx=(12, 0))
         self.fps_var = tk.StringVar(value="30")
         ttk.Combobox(
-            row1,
-            textvariable=self.fps_var,
-            values=["60", "30", "20"],
-            width=6,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=8)
+            r1, textvariable=self.fps_var, values=["60", "30", "20"],
+            width=5, state="readonly",
+        ).pack(side=tk.LEFT, padx=6)
 
-        row2 = ttk.Frame(settings)
-        row2.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row2, text="Decode Mode:").pack(side=tk.LEFT)
+        ttk.Label(r1, text="Decode:").pack(side=tk.LEFT, padx=(12, 0))
         self.decode_var = tk.StringVar(value="software")
         ttk.Combobox(
-            row2,
-            textvariable=self.decode_var,
-            values=["software", "auto", "hardware"],
-            width=12,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=8)
+            r1, textvariable=self.decode_var,
+            values=["software", "auto", "hardware"], width=10, state="readonly",
+        ).pack(side=tk.LEFT, padx=6)
 
-        ttk.Label(row2, text="Codec:").pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Label(r1, text="Codec:").pack(side=tk.LEFT, padx=(12, 0))
         self.codec_var = tk.StringVar(value="h264")
         ttk.Combobox(
-            row2,
-            textvariable=self.codec_var,
-            values=["h264", "hevc"],
-            width=8,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=8)
+            r1, textvariable=self.codec_var, values=["h264", "hevc"],
+            width=7, state="readonly",
+        ).pack(side=tk.LEFT, padx=6)
 
-        # Buttons
-        btn_frame = ttk.Frame(main)
-        btn_frame.pack(fill=tk.X, pady=10)
-
-        self.start_btn = ttk.Button(
-            btn_frame, text="Start Pipeline (Demo)", command=self._start_pipeline
-        )
-        self.start_btn.pack(side=tk.LEFT, padx=(0, 8))
-
-        self.stop_btn = ttk.Button(
-            btn_frame, text="Stop", command=self._stop_pipeline, state=tk.DISABLED
-        )
+        # Action buttons
+        btns = ttk.Frame(main)
+        btns.pack(fill=tk.X, pady=8)
+        self.connect_btn = ttk.Button(btns, text="Connect & Start Stream", command=self._connect)
+        self.connect_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.stop_btn = ttk.Button(btns, text="Stop", command=self._stop, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT)
+        ttk.Button(btns, text="About", command=self._about).pack(side=tk.RIGHT)
 
-        ttk.Button(btn_frame, text="About", command=self._show_about).pack(side=tk.RIGHT)
-
-        # Log area
-        log_frame = ttk.LabelFrame(main, text="Log", padding=4)
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=6)
-
+        # Log
+        logf = ttk.LabelFrame(main, text="Log", padding=4)
+        logf.pack(fill=tk.BOTH, expand=True, pady=4)
         self.log_text = scrolledtext.ScrolledText(
-            log_frame,
-            height=12,
-            bg="#121212",
-            fg="#c0c0c0",
-            insertbackground="#ffffff",
-            font=("Consolas", 9),
+            logf, height=12, bg="#121212", fg="#c0c0c0",
+            insertbackground="#ffffff", font=("Consolas", 9),
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log_text.configure(state=tk.DISABLED)
 
         self._log("PS5-REMOTE-PLAY ready.")
-        self._log("This is the current skeleton. Full console connection is not yet implemented.")
-        self._log("Use the settings above and press ‘Start Pipeline (Demo)’ to exercise the streaming layers.")
+        self._log("1. Paste your base64 Account ID and click Validate.")
+        self._log("2. Click Discover (or type the console IP manually).")
+        self._log("3. Enter the 8-digit PIN shown on your PlayStation and press Connect.")
+        self._log("Note: Full binary protocol is still being completed – connection may not succeed yet.")
 
     def _log(self, msg: str):
         self.log_queue.put(msg)
@@ -199,124 +191,151 @@ class App(tk.Tk):
                 self.log_text.configure(state=tk.DISABLED)
         except queue.Empty:
             pass
-        self.after(100, self._poll_log_queue)
+        self.after(120, self._poll_log_queue)
 
     def _validate_account_id(self):
         value = self.account_id_var.get().strip()
         if not value:
-            messagebox.showwarning("Account ID", "Please paste a base64 Account ID.")
+            messagebox.showwarning("Account ID", "Paste a base64 Account ID first.")
             return
         try:
             numeric = base64_to_account_id(value)
-            roundtrip = account_id_to_base64(numeric)
-            self._log(f"Account ID valid. Numeric: {numeric}")
-            self._log(f"Round-trip base64: {roundtrip}")
-            messagebox.showinfo("Account ID", f"Valid!\n\nNumeric ID: {numeric}")
+            self._log(f"Account ID valid → numeric {numeric}")
+            messagebox.showinfo("Account ID", f"Valid.\n\nNumeric: {numeric}")
         except Exception as e:
             self._log(f"Invalid Account ID: {e}")
-            messagebox.showerror("Account ID", f"Invalid base64 Account ID:\n{e}")
+            messagebox.showerror("Account ID", str(e))
 
-    def _start_pipeline(self):
-        if self.pipeline and self.pipeline.is_running:
+    def _discover(self):
+        self._log("Discovering consoles on the local network...")
+
+        def work():
+            try:
+                consoles = asyncio.run(discover_consoles(timeout=3.0))
+                self.discovered = consoles
+                self.console_list.delete(0, tk.END)
+                if not consoles:
+                    self._log("No consoles responded. You can still type the IP manually.")
+                for c in consoles:
+                    self.console_list.insert(tk.END, str(c))
+                    self._log(f"Found: {c}")
+            except Exception as e:
+                self._log(f"Discovery error: {e}")
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_console_select(self, _event=None):
+        sel = self.console_list.curselection()
+        if sel and self.discovered:
+            c = self.discovered[sel[0]]
+            self.host_var.set(c.host)
+
+    def _make_config(self) -> StreamConfig:
+        w, h = self.res_var.get().split("x")
+        return StreamConfig(
+            max_width=int(w),
+            max_height=int(h),
+            target_fps=int(self.fps_var.get()),
+            decode_mode=DecodeMode(self.decode_var.get()),
+            preferred_codec=VideoCodec.H264 if self.codec_var.get() == "h264" else VideoCodec.H265,
+        )
+
+    def _connect(self):
+        account = self.account_id_var.get().strip()
+        host = self.host_var.get().strip()
+        pin = self.pin_var.get().strip()
+
+        if not account:
+            messagebox.showwarning("Missing", "Account ID is required.")
+            return
+        if not host:
+            messagebox.showwarning("Missing", "Console IP address is required.")
+            return
+        if not (pin.isdigit() and len(pin) == 8):
+            messagebox.showwarning("PIN", "PIN must be exactly 8 digits.")
             return
 
         try:
-            w, h = self.res_var.get().split("x")
-            width, height = int(w), int(h)
-            fps = int(self.fps_var.get())
-            decode = DecodeMode(self.decode_var.get())
-            codec = VideoCodec.H264 if self.codec_var.get() == "h264" else VideoCodec.H265
-
-            config = StreamConfig(
-                max_width=width,
-                max_height=height,
-                target_fps=fps,
-                decode_mode=decode,
-                preferred_codec=codec,
-            )
-
-            self.pipeline = StreamPipeline(config)
-
-            def run():
-                import asyncio
-
-                async def _run():
-                    try:
-                        port = await self.pipeline.start()
-                        self._log(f"Pipeline started on UDP port {port}")
-                        self._log("Waiting for media packets (none will arrive until a real session exists)...")
-                        # Keep alive until stopped
-                        while self.pipeline and self.pipeline.is_running:
-                            await asyncio.sleep(0.5)
-                    except Exception as e:
-                        self._log(f"Pipeline error: {e}")
-                        logger.exception("Pipeline failed")
-
-                asyncio.run(_run())
-
-            threading.Thread(target=run, daemon=True).start()
-
-            self.start_btn.configure(state=tk.DISABLED)
-            self.stop_btn.configure(state=tk.NORMAL)
-            self._log(
-                f"Starting pipeline → {width}x{height}@{fps}fps, "
-                f"decode={decode.value}, codec={codec.value}"
-            )
-
+            base64_to_account_id(account)
         except Exception as e:
-            self._log(f"Failed to start: {e}")
-            messagebox.showerror("Error", str(e))
-
-    def _stop_pipeline(self):
-        if not self.pipeline:
+            messagebox.showerror("Account ID", f"Invalid: {e}")
             return
 
-        def stop():
-            import asyncio
+        self.connect_btn.configure(state=tk.DISABLED)
+        self.stop_btn.configure(state=tk.NORMAL)
+        self._log(f"Connecting to {host} with PIN {pin}...")
 
-            async def _stop():
-                await self.pipeline.stop()
-                self._log("Pipeline stopped.")
-
+        def work():
             try:
-                asyncio.run(_stop())
+                config = self._make_config()
+                session = RemotePlaySession(account_id_b64=account, stream_config=config)
+
+                # Build a ConsoleInfo for manual entry
+                console = ConsoleInfo(name="Manual", host=host, port=9295)
+                # Prefer discovered info if available
+                for c in self.discovered:
+                    if c.host == host:
+                        console = c
+                        break
+
+                ok = asyncio.run(session.connect(console, pin))
+                self.session = session
+
+                if ok:
+                    self._log("Session started (STREAMING state).")
+                    self._log("Media pipeline is listening. Full binary protocol still being finalized.")
+                else:
+                    self._log(f"Connect failed: {session.last_error}")
+                    self.connect_btn.configure(state=tk.NORMAL)
+                    self.stop_btn.configure(state=tk.DISABLED)
+                    self.session = None
+
+            except Exception as e:
+                self._log(f"Connect error: {e}")
+                logger.exception("Connect failed")
+                self.connect_btn.configure(state=tk.NORMAL)
+                self.stop_btn.configure(state=tk.DISABLED)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _stop(self):
+        if not self.session:
+            return
+
+        def work():
+            try:
+                asyncio.run(self.session.stop())
+                self._log("Session stopped.")
             except Exception as e:
                 self._log(f"Stop error: {e}")
-
-            self.pipeline = None
-            self.start_btn.configure(state=tk.NORMAL)
+            self.session = None
+            self.connect_btn.configure(state=tk.NORMAL)
             self.stop_btn.configure(state=tk.DISABLED)
 
-        threading.Thread(target=stop, daemon=True).start()
+        threading.Thread(target=work, daemon=True).start()
 
-    def _show_about(self):
+    def _about(self):
         messagebox.showinfo(
-            "About PS5-REMOTE-PLAY",
+            "About",
             "PS5-REMOTE-PLAY\n\n"
             "Independent open-source PlayStation Remote Play client\n"
-            "focused on older / lower-powered hardware.\n\n"
-            "This is currently a development skeleton.\n"
-            "Full console connection is not yet implemented.\n\n"
+            "with focus on older / lower-powered hardware.\n\n"
+            "Protocol layer (discovery, registration, session) is present.\n"
+            "Exact binary packet formats are still being completed.\n\n"
             "Not affiliated with Sony or Chiaki.",
         )
 
 
 def main():
     parser = argparse.ArgumentParser(description="PS5-REMOTE-PLAY")
-    parser.add_argument(
-        "--cli",
-        action="store_true",
-        help="Run in simple CLI mode instead of GUI",
-    )
+    parser.add_argument("--cli", action="store_true", help="CLI mode (minimal)")
     args = parser.parse_args()
 
     if args.cli:
-        print("PS5-REMOTE-PLAY – CLI mode")
-        print("Full interactive CLI is not implemented yet. Launch without --cli for the GUI.")
+        print("PS5-REMOTE-PLAY – use the GUI for full functionality.")
         return
 
-    app = App()
-    app.mainloop()
+    App().mainloop()
 
 
 if __name__ == "__main__":
