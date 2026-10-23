@@ -16,29 +16,50 @@ This is a **from-scratch** implementation focused on maximum compatibility with 
 - Clean, modern, well-documented codebase that others can audit and extend
 - Fully open source
 
-## Status
+## Current Status
 
-This repository is the foundation of a new independent client. Core protocol work, streaming pipeline, and registration flow are under active development.
+| Component              | Status                          |
+|------------------------|---------------------------------|
+| Account ID tooling     | Done                            |
+| Streaming pipeline     | **Skeleton implemented**        |
+| Software decoder       | Working (PyAV / FFmpeg)         |
+| Packet receiver        | Working (async UDP)             |
+| Stream crypto          | Interface ready (placeholder)   |
+| Session / control      | Not started                     |
+| Discovery / registration | Not started                   |
+| Input & UI             | Not started                     |
+
+### Streaming Pipeline Highlights
+
+- `StreamPipeline` orchestrates receive → decrypt → demux → decode
+- **Software decoding is the default** and first-class path
+- Conservative defaults (720p / 30 fps / modest bitrate) for older machines
+- Easy to force low-power mode via `StreamConfig`
 
 ## Getting Your Base64 Account ID
-
-Remote Play clients register with your console using your PSN Account ID (not your Online ID).  
-It is an 8-byte little-endian integer encoded as base64.
-
-You can obtain it with the included helper:
 
 ```bash
 python tools/get_account_id.py
 ```
 
-Or use any of the well-known public methods that extract the same value (the format is standard).
+Paste the resulting base64 string when registering a console.
 
-Paste the resulting base64 string into the client when registering a console.
-
-## Building / Running (placeholder)
+## Quick Start (development)
 
 ```bash
-# Coming soon – current focus is core library and protocol implementation
+pip install -r requirements.txt
+
+# Example of creating a pipeline (still needs a real session)
+from src.stream import StreamPipeline, StreamConfig
+
+config = StreamConfig(
+    max_width=1280,
+    max_height=720,
+    target_fps=30,
+    decode_mode="software"   # explicit
+)
+pipeline = StreamPipeline(config)
+# await pipeline.start()
 ```
 
 ## Project Structure
@@ -47,15 +68,20 @@ Paste the resulting base64 string into the client when registering a console.
 PS5-REMOTE-PLAY/
 ├── README.md
 ├── LICENSE
+├── requirements.txt
 ├── docs/
 │   └── architecture.md
 ├── tools/
-│   └── get_account_id.py          # Helper to obtain base64 Account ID
+│   └── get_account_id.py
 ├── src/
-│   ├── core/                      # Protocol, session, discovery
-│   ├── stream/                    # Video/audio pipeline (software decode first)
-│   ├── input/                     # Controller mapping
-│   └── ui/                        # Lightweight frontend
+│   ├── core/
+│   │   └── account.py          # base64 Account ID helpers
+│   └── stream/
+│       ├── config.py           # older-hardware friendly settings
+│       ├── receiver.py         # async UDP receiver
+│       ├── crypto.py           # decryption interface
+│       ├── decoder.py          # software-first PyAV decoder
+│       └── pipeline.py         # main orchestrator
 └── tests/
 ```
 
@@ -68,5 +94,3 @@ MIT License – see [LICENSE](LICENSE).
 This project is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment in any way.  
 PlayStation, PS5, PS4, and Remote Play are trademarks of Sony Interactive Entertainment Inc.  
 This is an independent open-source effort for educational and personal use.
-
-Use at your own risk. Streaming your own console is generally permitted under Sony’s terms when using official methods; third-party clients exist in a gray area of reverse-engineered protocols.
