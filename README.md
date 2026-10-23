@@ -4,25 +4,27 @@
 
 This is a **from-scratch** implementation focused on maximum compatibility with older / lower-powered hardware. It is **not** a fork of Chiaki or any other existing project.
 
-## Download the Windows .exe (GitHub Releases)
+## Download the Windows .exe
 
-Pre-built executables are published on the **Releases** page:
+### Every commit
+The Windows `.exe` is **built automatically on every push** to `main`.
+
+1. Go to the **Actions** tab:  
+   https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/actions
+2. Open the latest successful “Build Windows Release” run
+3. Download the artifact **PS5-REMOTE-PLAY-windows** (contains `PS5-REMOTE-PLAY.exe`)
+
+Artifacts are kept for 30 days.
+
+### Official Releases (versioned)
+When you create a version tag (`v0.1.0`, `v0.2.0`, …), the same workflow also publishes a proper **GitHub Release** with the `.exe` attached:
 
 **https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/releases**
 
-### How to create a new Release (you only need to do this once per version)
-
-1. Go to the repository on GitHub
-2. Click **Releases** → **Create a new release**
-3. In “Choose a tag”, type a new tag such as `v0.1.0` and click **Create new tag**
-4. Title it (e.g. `v0.1.0 – First public build`)
-5. Click **Publish release**
-
-The GitHub Actions workflow will automatically:
-- Build the Windows `.exe` on a real Windows runner
-- Attach `PS5-REMOTE-PLAY.exe` to that release
-
-You can also trigger a build manually from the **Actions** tab → “Build Windows Release” → “Run workflow”.
+To make a new Release:
+1. Releases → Create a new release
+2. Create a tag like `v0.1.0`
+3. Publish release → the `.exe` is attached automatically
 
 ---
 
@@ -37,13 +39,11 @@ You can also trigger a build manually from the **Actions** tab → “Build Wind
 | Streaming pipeline       | Implemented (receive → decrypt → decode)    |
 | Software decoder         | Working (PyAV / FFmpeg)                     |
 | Desktop GUI              | Done – full connect flow                    |
-| Windows .exe packaging   | Ready (`build.bat` + GitHub Actions)        |
+| Windows .exe packaging   | Built on every commit + on tags             |
 | Exact binary packets     | Still being finalized                       |
 | Real console streaming   | Not yet reliable                            |
 
 ## Local build (optional)
-
-If you prefer to build yourself:
 
 1. Install Python 3.10+ on Windows
 2. Double-click **`build.bat`**
@@ -70,7 +70,7 @@ python main.py
 PS5-REMOTE-PLAY/
 ├── main.py
 ├── build.bat
-├── .github/workflows/build-release.yml   # Auto-builds .exe on tag
+├── .github/workflows/build-release.yml   # Builds .exe on every commit
 ├── src/
 │   ├── core/
 │   ├── protocol/
