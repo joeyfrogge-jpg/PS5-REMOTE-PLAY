@@ -1,89 +1,84 @@
 # PS5-REMOTE-PLAY
 
-**Independent open-source PlayStation Remote Play client** for PS4 and PS5.
+Independent open-source client for PlayStation Remote Play (PS4 & PS5).
 
-This is a **from-scratch** implementation focused on maximum compatibility with older / lower-powered hardware. It is **not** a fork of Chiaki or any other existing project.
+Built from scratch with a focus on **older and lower-powered hardware** — software video decoding, modest default resolutions, and a lightweight desktop UI. This is **not** a fork of Chiaki or any other existing project.
+
+> **Current stage:** The architecture, GUI, streaming pipeline, discovery, registration, and session layers are in place. Exact binary protocol packets are still being finalized, so reliable streaming from a real console is not yet available.
 
 ## Download the Windows .exe
 
 ### Every commit
-The Windows `.exe` is **built automatically on every push** to `main`.
+The Windows `.exe` is built automatically on every push to `main`.
 
-1. Go to the **Actions** tab:  
-   https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/actions
-2. Open the latest successful “Build Windows Release” run
-3. Download the artifact **PS5-REMOTE-PLAY-windows** (contains `PS5-REMOTE-PLAY.exe`)
+1. Open the **Actions** tab: https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/actions  
+2. Select the latest successful **Build Windows Release** run  
+3. Download the artifact **PS5-REMOTE-PLAY-windows**
 
 Artifacts are kept for 30 days.
 
-### Official Releases (versioned)
-When you create a version tag (`v0.1.0`, `v0.2.0`, …), the same workflow also publishes a proper **GitHub Release** with the `.exe` attached:
+### Versioned Releases
+Pushing a tag such as `v0.1.0` also creates a proper GitHub Release with the `.exe` attached:
 
-**https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/releases**
-
-To make a new Release:
-1. Releases → Create a new release
-2. Create a tag like `v0.1.0`
-3. Publish release → the `.exe` is attached automatically
+https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/releases
 
 ---
 
-## Current Status
+## Features (implemented)
 
-| Component                | Status                                      |
-|--------------------------|---------------------------------------------|
-| Account ID tooling       | Done                                        |
-| Discovery                | Implemented (structure + probe)             |
-| Registration             | Implemented (Account ID + PIN flow)         |
-| Session / control        | Implemented (lifecycle + control channel)   |
-| Streaming pipeline       | Implemented (receive → decrypt → decode)    |
-| Software decoder         | Working (PyAV / FFmpeg)                     |
-| Desktop GUI              | Done – full connect flow                    |
-| Windows .exe packaging   | Built on every commit + on tags             |
-| Exact binary packets     | Still being finalized                       |
-| Real console streaming   | Not yet reliable                            |
+- PSN Account ID (base64) validation and helpers
+- Local network console discovery
+- Registration flow (Account ID + 8-digit PIN)
+- Session lifecycle and control channel scaffolding
+- Streaming pipeline: UDP receive → decrypt → software decode (H.264/H.265)
+- Configurable resolution, FPS, bitrate, and decode mode
+- Simple dark-themed desktop GUI
+- One-click Windows build (`build.bat`) and automated CI builds
 
-## Local build (optional)
-
-1. Install Python 3.10+ on Windows
-2. Double-click **`build.bat`**
-3. Get the executable at `dist\PS5-REMOTE-PLAY.exe`
-
-## Running from source
+## Quick start (from source)
 
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-## Typical use in the GUI
-
-1. Paste your base64 PSN Account ID → Validate
-2. Click **Discover** (or type the console IP)
+1. Paste your base64 PSN Account ID and click **Validate**
+2. Click **Discover** or enter the console IP manually
 3. Enter the 8-digit PIN shown on the PlayStation
-4. Choose resolution / FPS / decode mode
+4. Choose resolution / FPS / decode settings
 5. Press **Connect & Start Stream**
 
-## Project Structure
+## Local Windows build
+
+```bat
+build.bat
+```
+
+The executable appears at `dist\PS5-REMOTE-PLAY.exe`.
+
+## Project layout
 
 ```
 PS5-REMOTE-PLAY/
-├── main.py
-├── build.bat
-├── .github/workflows/build-release.yml   # Builds .exe on every commit
+├── main.py                          # Desktop GUI
+├── build.bat                        # Local Windows builder
+├── .github/workflows/               # CI – builds .exe on every commit
 ├── src/
-│   ├── core/
-│   ├── protocol/
-│   └── stream/
+│   ├── core/                        # Account ID helpers
+│   ├── protocol/                    # Discovery, registration, session
+│   └── stream/                      # Media pipeline (receive/decode)
 ├── tools/
+│   └── get_account_id.py            # Helper to obtain base64 Account ID
 └── docs/
+    └── architecture.md
 ```
 
 ## License
 
-MIT License – see [LICENSE](LICENSE).
+MIT – see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-Not affiliated with Sony Interactive Entertainment.  
-PlayStation, PS5, PS4, and Remote Play are trademarks of Sony Interactive Entertainment Inc.
+This project is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment.  
+PlayStation, PS5, PS4, and Remote Play are trademarks of Sony Interactive Entertainment Inc.  
+Use at your own risk.
