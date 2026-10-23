@@ -6,53 +6,27 @@ This is a **from-scratch** implementation focused on maximum compatibility with 
 
 ## Current Status
 
-| Component                | Status                          |
-|--------------------------|---------------------------------|
-| Account ID tooling       | Done                            |
-| Streaming pipeline       | Skeleton implemented            |
-| Software decoder         | Working (PyAV / FFmpeg)         |
-| Packet receiver          | Working (async UDP)             |
-| Stream crypto            | Interface ready (placeholder)   |
-| Desktop GUI launcher     | **Done**                        |
-| Windows .exe packaging   | **Ready** (see below)           |
-| Session / control        | Not started                     |
-| Discovery / registration | Not started                     |
-| Real console connection  | Not yet possible                |
+| Component                | Status                                      |
+|--------------------------|---------------------------------------------|
+| Account ID tooling       | Done                                        |
+| Discovery                | Implemented (structure + probe)             |
+| Registration             | Implemented (Account ID + PIN flow)         |
+| Session / control        | Implemented (lifecycle + control channel)   |
+| Streaming pipeline       | Implemented (receive → decrypt → decode)    |
+| Software decoder         | Working (PyAV / FFmpeg)                     |
+| Desktop GUI              | Done – full connect flow                    |
+| Windows .exe packaging   | Ready (`build.bat`)                         |
+| Exact binary packets     | Still being finalized                       |
+| Real console streaming   | Not yet reliable                            |
 
-> **Important**: This is still a development skeleton. The .exe runs and exercises the streaming pipeline layers, but it **cannot yet connect to a real PS4/PS5**. Full protocol implementation is required before that works.
+> The high-level protocol and all public APIs are in place. Exact binary packet formats for discovery/registration/control are the remaining work before reliable real-console connections.
 
 ## Build the Windows .exe
 
-### Requirements
-- Windows 10 or 11
-- Python 3.10 or newer (https://www.python.org)
-- Make sure “Add Python to PATH” was checked during installation
-
-### One-click build
-
-1. Download or clone this repository
-2. Double-click **`build.bat`**
-3. Wait for it to finish
-4. Your executable will be at:
-
-```
-dist\PS5-REMOTE-PLAY.exe
-```
-
-You can copy that single `.exe` anywhere and run it. No Python installation is required on the target machine.
-
-### Manual build (alternative)
-
-```bat
-pip install -r requirements.txt
-pyinstaller --noconfirm --clean --onefile --windowed --name "PS5-REMOTE-PLAY" --add-data "src;src" main.py
-```
-
-Or use the provided spec file:
-
-```bat
-pyinstaller --noconfirm PS5-REMOTE-PLAY.spec
-```
+1. Install Python 3.10+ on Windows (check “Add to PATH”)
+2. Clone or download this repo
+3. Double-click **`build.bat`**
+4. Get the executable at `dist\PS5-REMOTE-PLAY.exe`
 
 ## Running from source
 
@@ -61,39 +35,29 @@ pip install -r requirements.txt
 python main.py
 ```
 
-A simple dark-themed GUI will open. You can:
+## Typical use in the GUI
 
-- Paste and validate a base64 PSN Account ID
-- Choose resolution / FPS / decode mode / codec
-- Start the streaming pipeline in demo mode (listens for packets)
-
-## Getting Your Base64 Account ID
-
-```bash
-python tools/get_account_id.py
-```
+1. Paste your base64 PSN Account ID → Validate
+2. Click **Discover** (or type the console IP)
+3. Enter the 8-digit PIN shown on the PlayStation
+4. Choose resolution / FPS / decode mode
+5. Press **Connect & Start Stream**
 
 ## Project Structure
 
 ```
 PS5-REMOTE-PLAY/
-├── main.py                 # GUI entry point (becomes the .exe)
-├── build.bat               # One-click Windows builder
-├── PS5-REMOTE-PLAY.spec    # PyInstaller configuration
-├── requirements.txt
+├── main.py                  # GUI
+├── build.bat
 ├── src/
-│   ├── core/
-│   │   └── account.py
-│   └── stream/
-│       ├── config.py
-│       ├── receiver.py
-│       ├── crypto.py
-│       ├── decoder.py
-│       └── pipeline.py
-├── tools/
-│   └── get_account_id.py
-└── docs/
-    └── architecture.md
+│   ├── core/account.py
+│   ├── protocol/            # NEW – discovery, registration, session
+│   │   ├── discovery.py
+│   │   ├── registration.py
+│   │   └── session.py
+│   └── stream/              # media pipeline
+├── tools/get_account_id.py
+└── docs/architecture.md
 ```
 
 ## License
@@ -102,6 +66,5 @@ MIT License – see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment in any way.  
-PlayStation, PS5, PS4, and Remote Play are trademarks of Sony Interactive Entertainment Inc.  
-This is an independent open-source effort for educational and personal use.
+Not affiliated with Sony Interactive Entertainment.  
+PlayStation, PS5, PS4, and Remote Play are trademarks of Sony Interactive Entertainment Inc.
