@@ -15,7 +15,6 @@ from enum import Enum, auto
 from typing import Optional
 
 from src.stream import StreamPipeline, StreamConfig
-from src.stream.config import DecodeMode, VideoCodec
 from .discovery import ConsoleInfo
 from .registration import register_console, RegistrationResult
 
