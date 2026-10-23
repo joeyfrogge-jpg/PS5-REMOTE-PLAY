@@ -15,11 +15,12 @@ PS5-REMOTE-PLAY is intentionally designed as a modular, from-scratch client with
    - Heartbeats, resolution / bitrate negotiation
    - Input packet transmission
 
-3. **Streaming Pipeline (Video + Audio)**
-   - Receive encrypted H.264 / H.265 streams
-   - Prefer **software decoding** first (libavcodec / FFmpeg software path)
-   - Optional hardware acceleration when available, but never required
-   - Configurable resolution and bitrate ceilings for weak machines
+3. **Streaming Pipeline (Video + Audio)** – *implemented skeleton*
+   - `src/stream/receiver.py` – Async UDP receiver with large buffers
+   - `src/stream/crypto.py` – Decryption interface (AES placeholder, ready for real keys)
+   - `src/stream/decoder.py` – Software-first H.264/H.265 + audio decoder via PyAV/FFmpeg
+   - `src/stream/pipeline.py` – Orchestrator that wires the stages together
+   - `src/stream/config.py` – Conservative defaults aimed at older hardware
 
 4. **Input**
    - Keyboard / mouse / gamepad abstraction
@@ -30,13 +31,24 @@ PS5-REMOTE-PLAY is intentionally designed as a modular, from-scratch client with
    - Lightweight, preferably immediate-mode or minimal retained-mode UI
    - Should remain usable on low-DPI / older displays
 
+## Streaming Pipeline Flow
+
+```
+UDP datagram
+    → StreamReceiver
+        → StreamCrypto.decrypt()
+            → simple demux (payload type)
+                → StreamDecoder (software path preferred)
+                    → video/audio frame callbacks (for renderer)
+```
+
 ## Design Principles for Older Hardware
 
 - Software decode is first-class, not a fallback
 - Aggressive frame dropping and resolution downscaling options
-- Minimal dependencies outside of well-supported libraries (FFmpeg, a small networking stack, a light UI toolkit)
+- Minimal dependencies outside of well-supported libraries (FFmpeg via PyAV, cryptography)
 - Avoid heavy frameworks that pull in modern GPU requirements
-- Clear compile-time and runtime feature flags so users can strip expensive paths
+- Clear runtime configuration so users can force low-power modes
 
 ## Independence
 
