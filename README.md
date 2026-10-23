@@ -4,6 +4,28 @@
 
 This is a **from-scratch** implementation focused on maximum compatibility with older / lower-powered hardware. It is **not** a fork of Chiaki or any other existing project.
 
+## Download the Windows .exe (GitHub Releases)
+
+Pre-built executables are published on the **Releases** page:
+
+**https://github.com/joeyfrogge-jpg/PS5-REMOTE-PLAY/releases**
+
+### How to create a new Release (you only need to do this once per version)
+
+1. Go to the repository on GitHub
+2. Click **Releases** → **Create a new release**
+3. In “Choose a tag”, type a new tag such as `v0.1.0` and click **Create new tag**
+4. Title it (e.g. `v0.1.0 – First public build`)
+5. Click **Publish release**
+
+The GitHub Actions workflow will automatically:
+- Build the Windows `.exe` on a real Windows runner
+- Attach `PS5-REMOTE-PLAY.exe` to that release
+
+You can also trigger a build manually from the **Actions** tab → “Build Windows Release” → “Run workflow”.
+
+---
+
 ## Current Status
 
 | Component                | Status                                      |
@@ -15,18 +37,17 @@ This is a **from-scratch** implementation focused on maximum compatibility with 
 | Streaming pipeline       | Implemented (receive → decrypt → decode)    |
 | Software decoder         | Working (PyAV / FFmpeg)                     |
 | Desktop GUI              | Done – full connect flow                    |
-| Windows .exe packaging   | Ready (`build.bat`)                         |
+| Windows .exe packaging   | Ready (`build.bat` + GitHub Actions)        |
 | Exact binary packets     | Still being finalized                       |
 | Real console streaming   | Not yet reliable                            |
 
-> The high-level protocol and all public APIs are in place. Exact binary packet formats for discovery/registration/control are the remaining work before reliable real-console connections.
+## Local build (optional)
 
-## Build the Windows .exe
+If you prefer to build yourself:
 
-1. Install Python 3.10+ on Windows (check “Add to PATH”)
-2. Clone or download this repo
-3. Double-click **`build.bat`**
-4. Get the executable at `dist\PS5-REMOTE-PLAY.exe`
+1. Install Python 3.10+ on Windows
+2. Double-click **`build.bat`**
+3. Get the executable at `dist\PS5-REMOTE-PLAY.exe`
 
 ## Running from source
 
@@ -47,17 +68,15 @@ python main.py
 
 ```
 PS5-REMOTE-PLAY/
-├── main.py                  # GUI
+├── main.py
 ├── build.bat
+├── .github/workflows/build-release.yml   # Auto-builds .exe on tag
 ├── src/
-│   ├── core/account.py
-│   ├── protocol/            # NEW – discovery, registration, session
-│   │   ├── discovery.py
-│   │   ├── registration.py
-│   │   └── session.py
-│   └── stream/              # media pipeline
-├── tools/get_account_id.py
-└── docs/architecture.md
+│   ├── core/
+│   ├── protocol/
+│   └── stream/
+├── tools/
+└── docs/
 ```
 
 ## License
