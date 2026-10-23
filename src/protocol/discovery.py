@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-import struct
 import time
 from dataclasses import dataclass
 from typing import List, Optional
@@ -78,10 +77,13 @@ async def discover_consoles(
     end_time = time.monotonic() + timeout
 
     while time.monotonic() < end_time:
+        remaining = end_time - time.monotonic()
+        if remaining <= 0:
+            break
         try:
             data, addr = await asyncio.wait_for(
                 loop.sock_recvfrom(sock, 4096),
-                timeout=max(0.05, end_time - time.monotonic()),
+                timeout=remaining,
             )
         except (asyncio.TimeoutError, OSError):
             break
@@ -126,10 +128,8 @@ def _parse_discovery_response(data: bytes, host: str) -> Optional[ConsoleInfo]:
             is_ps5 = "PS5" in host_type
         elif lower.startswith("status:"):
             status = line.split(":", 1)[1].strip().lower()
-            is_ready = status in ("ok", "ready", "standing by") is False
             # "Standby" / "Standing By" means the console can be woken
-            if "stand" in status:
-                is_ready = False
+            is_ready = "stand" not in status
         elif lower.startswith("host-request-port:"):
             try:
                 port = int(line.split(":", 1)[1].strip())
