@@ -4,3 +4,6 @@ cryptography>=42.0  # For future real AES stream crypto
 
 # Optional but recommended
 numpy>=1.26         # Useful for frame conversion / debugging
+
+# Build tools (only needed to create the .exe)
+pyinstaller>=6.0
